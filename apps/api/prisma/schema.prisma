@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ====================== ENUMS ======================
+
+enum UserRole {
+  FOUNDER
+  INVESTOR
+  ADMIN
+}
+
+enum Sector {
+  Fintech
+  Healthtech
+  SaaS
+  EdTech
+  ConsumerTech
+  DeepTech
+  Other
+}
+
+enum Stage {
+  PreSeed
+  Seed
+  SeriesA
+}
+
+enum RoundType {
+  PreSeed
+  Seed
+  Bridge
+  SeriesA
+}
+
+enum Instrument {
+  Equity
+  SAFE
+  ConvertibleNote
+}
+
+enum ListingStatus {
+  Draft
+  Pending
+  Live
+  Rejected
+  Closed
+}
+
+enum RequestStatus {
+  Pending
+  Approved
+  Declined
+}
+
+enum ActivityEventType {
+  LISTING_SUBMITTED
+  LISTING_APPROVED
+  LISTING_REJECTED
+  DOCUMENT_REQUESTED
+  DOCUMENT_APPROVED
+  DOCUMENT_DECLINED
+  CONNECTION_REQUESTED
+  CONNECTION_APPROVED
+  CONNECTION_DECLINED
+  USER_DEACTIVATED
+}
+
+// ====================== MODELS ======================
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String
+  role             UserRole
+  isActive         Boolean  @default(true)
+  hasAcceptedTerms Boolean
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  founderProfile     FounderProfile?
+  investorProfile    InvestorProfile?
+  startups           Startup[]
+  documentRequests   DocumentRequest[]   @relation("InvestorDocumentRequests")
+  connectionRequests ConnectionRequest[] @relation("InvestorConnectionRequests")
+  activityLogs       ActivityLog[]       @relation("ActorActivityLogs")
+
+  @@map("users")
+}
+
+model FounderProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  fullName    String   @db.VarChar(100)
+  bio         String?
+  linkedinUrl String?  @db.VarChar(255)
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("founder_profiles")
+}
+
+model Startup {
+  id          String   @id @default(uuid())
+  founderId   String
+  name        String   @db.VarChar(100)
+  slug        String   @unique
+  sector      Sector
+  stage       Stage
+  oneLiner    String   @db.VarChar(160)
+  description String?
+  logoUrl     String?
+  websiteUrl  String?  @db.VarChar(255)
+  location    String?  @db.VarChar(100)
+  teamSize    Int?
+  viewCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  founder  User                 @relation(fields: [founderId], references: [id])
+  listings FundraisingListing[]
+
+  @@map("startups")
+}
+
+model FundraisingListing {
+  id                 String        @id @default(uuid())
+  startupId          String
+  roundType          RoundType
+  targetAmountInr    BigInt
+  instrument         Instrument
+  useOfFunds         String?
+  tractionHighlights Json?
+  status             ListingStatus @default(Draft)
+  pitchDeckUrl       String?
+  investorCount      Int           @default(0)
+  investorCap        Int           @default(200)
+  adminNote          String?
+  submittedAt        DateTime?
+  publishedAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  startup            Startup             @relation(fields: [startupId], references: [id])
+  documentRequests   DocumentRequest[]
+  connectionRequests ConnectionRequest[]
+
+  @@map("fundraising_listings")
+}
+
+model InvestorProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  fullName         String   @db.VarChar(100)
+  bio              String?
+  investmentThesis String?
+  minChequeSizeInr BigInt?
+  maxChequeSizeInr BigInt?
+  sectors          String[]
+  stages           String[]
+  linkedinUrl      String?  @db.VarChar(255)
+  isVerified       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("investor_profiles")
+}
+
+model DocumentRequest {
+  id          String        @id @default(uuid())
+  listingId   String
+  investorId  String
+  status      RequestStatus @default(Pending)
+  requestedAt DateTime      @default(now())
+  resolvedAt  DateTime?
+
+  listing  FundraisingListing @relation(fields: [listingId], references: [id])
+  investor User               @relation("InvestorDocumentRequests", fields: [investorId], references: [id])
+
+  @@unique([listingId, investorId])
+  @@map("document_requests")
+}
+
+model ConnectionRequest {
+  id                 String        @id @default(uuid())
+  listingId          String
+  investorId         String
+  status             RequestStatus @default(Pending)
+  disclaimerAccepted Boolean
+  introNote          String?
+  requestedAt        DateTime      @default(now())
+  resolvedAt         DateTime?
+
+  listing  FundraisingListing @relation(fields: [listingId], references: [id])
+  investor User               @relation("InvestorConnectionRequests", fields: [investorId], references: [id])
+
+  @@unique([listingId, investorId])
+  @@map("connection_requests")
+}
+
+model ActivityLog {
+  id        String            @id @default(uuid())
+  actorId   String
+  targetId  String?
+  eventType ActivityEventType
+  metadata  Json?
+  createdAt DateTime          @default(now())
+
+  actor User @relation("ActorActivityLogs", fields: [actorId], references: [id])
+
+  @@map("activity_logs")
+}
